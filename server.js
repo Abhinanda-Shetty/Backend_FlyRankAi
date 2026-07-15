@@ -8,7 +8,7 @@ const tasks = [
   {
     id: Number,
     title: String,
-    done: Boolean,
+    done: { type: Boolean, default: false },
   },
 ];
 tasks.push({ id: 1, title: "Meeting", done: false });
@@ -38,6 +38,18 @@ app.get("/tasks/:id", (req, res) => {
     res.status(404).send({ error: `Task ${taskId} not found` });
   }
   res.status(200).send(task);
+});
+
+// Stage 3: create with validation
+app.post("/tasks", (req, res) => {
+  const { title } = req.body;
+  if (!title) {
+    return res.status(400).send({ error: "Title is required" });
+  }
+  const id = tasks.length;
+  const newTask = { id, title };
+  tasks.push(newTask);
+  res.status(201).send(newTask);
 });
 
 app.listen(3000, () => {
