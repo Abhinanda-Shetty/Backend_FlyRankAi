@@ -102,6 +102,12 @@ app.delete("/tasks/:id", (req, res) => {
   res.status(204).send();
 });
 
+// Stage 5: Swagger UI
+const swaggerUi = require("swagger-ui-express");
+const swaggerDocument = require("./openapi.json");
+// Serve Swagger UI at /docs
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
 app.listen(3000, () => {
   console.log("Server is running on port 3000");
 });
