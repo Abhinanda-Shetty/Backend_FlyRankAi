@@ -1,26 +1,29 @@
 const express = require("express");
+const db = require("./database");
 const app = express();
 
 // Middleware to parse JSON request bodies
 app.use(express.json());
 
-// Define the tasks object with the specified properties
-const tasks = [
-  {
-    id: Number,
-    title: String,
-    done: Boolean,
-  },
-];
-tasks.push({ id: 1, title: "Meeting", done: false });
-tasks.push({ id: 2, title: "Assignment", done: true });
-tasks.push({ id: 3, title: "Event", done: false });
+// create a tasks table if it doesn't exist
+db.prepare(
+  "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT , done BOOLEAN DEFAULT 0)"
+).run();
+
+db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)").run("Meeting", 0);
+db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)").run(
+  "Assignment",
+  1
+);
+db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)").run("Event", 0);
 
 // Stage 1: root and health endpoints
 app.get("/", (req, res) => {
-  res
-    .status(200)
-    .send({ name: "Task API", version: "1.0", endpoints: ["/tasks"] });
+  res.status(200).send({
+    name: "Task API",
+    version: "1.0",
+    endpoints: ["/tasks", "/health", "/tasks/:id", "/docs"],
+  });
 });
 
 app.get("/health", (req, res) => {
@@ -29,15 +32,16 @@ app.get("/health", (req, res) => {
 
 // Stage 2: read endpoints with 404
 app.get("/tasks", (req, res) => {
-  if (tasks.length === 1) {
+  const tasks = db.prepare("SELECT * FROM tasks").all();
+  if (tasks.length === 0) {
     return res.status(404).send({ error: "No tasks found" });
   }
-  res.status(200).send(tasks.slice(1)); // Exclude the first element which is the schema
+  res.status(200).send(tasks);
 });
 
 app.get("/tasks/:id", (req, res) => {
   const taskId = parseInt(req.params.id);
-  const task = tasks.find((t) => t.id === taskId);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
   if (!task) {
     return res.status(404).send({ error: `Task ${taskId} not found` });
   }
@@ -52,13 +56,14 @@ app.post("/tasks", (req, res) => {
     return res.status(400).send({ error: "Title is required" });
   }
   // Generate a new id for the task next greater than the current max id
-  const id =
-    tasks.length > 1
-      ? Math.max(...tasks.slice(1).map((task) => task.id)) + 1
-      : 1;
+  const id = db.prepare("SELECT MAX(id) FROM tasks").get()["MAX(id)"] + 1 || 1;
   const newTask = { id, title, done: false };
 
-  tasks.push(newTask);
+  db.prepare("INSERT INTO tasks (id, title, done) VALUES (?, ?, ?)").run(
+    newTask.id,
+    newTask.title,
+    newTask.done
+  );
   res.status(201).send(newTask);
 });
 
@@ -66,7 +71,8 @@ app.post("/tasks", (req, res) => {
 app.put("/tasks/:id", (req, res) => {
   // Validate task id
   const taskId = parseInt(req.params.id);
-  const task = tasks.find((t) => t.id === taskId);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+  console.log(task);
   if (!task) {
     return res.status(404).send({ error: `Task ${taskId} not found` });
   }
@@ -84,22 +90,26 @@ app.put("/tasks/:id", (req, res) => {
   if (done !== undefined) {
     task.done = done;
   }
-  // Update the task in the tasks array
-  tasks[tasks.indexOf(task)] = task;
+  // Update the task in the database
+  db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(
+    task.title,
+    task.done,
+    taskId
+  );
   res.status(200).send(task);
 });
 
 app.delete("/tasks/:id", (req, res) => {
   const taskId = parseInt(req.params.id);
-  // Get the index of the task to be deleted
-  const taskIndex = tasks.findIndex((t) => t.id === taskId);
+  // Get the task to be deleted
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
   // If task not found, return 404
-  if (taskIndex === -1) {
+  if (!task) {
     return res.status(404).send({ error: `Task ${taskId} not found` });
   }
   // Remove the task from the tasks array
-  tasks.splice(taskIndex, 1);
-  res.status(204).send();
+  db.prepare("DELETE FROM tasks WHERE id = ?").run(taskId);
+  res.status(204).send(); // Return 204 No Content
 });
 
 // Stage 5: Swagger UI
