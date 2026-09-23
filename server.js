@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cookieParser = require("cookie-parser");
+const authMiddleware = require("./middlewares/authMiddleware");
 const taskRouter = require("./routers/tasksRouter");
 const authRouter = require("./routers/authRouter");
 const db = require("./database");
@@ -47,23 +48,12 @@ app.use("/auth", authRouter);
 app.get("/public/info", (req, res) => {
   res.status(200).json({ message: "Welcome stranger! This info is public." });
 });
-app.get("/protected/profile", async (req, res) => {
-  const authHeader = req.headers.authorization; // Bearer <token>
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Access token required" });
-  }
-
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ error: "Access token required" });
-  }
-  // Stage 3: profile route token verification
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data?.user) {
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-  const { id, email, created_at } = data.user;
+app.get("/protected/profile", authMiddleware, (req, res) => {
+  const { id, email, created_at } = req.user;
   res.status(200).json({ id, email, created_at });
+});
+app.get("/protected/dashboard", authMiddleware, (req, res) => {
+  res.status(200).json({ message: `Welcome, ${req.user.email}` });
 });
 
 // Stage 5: Swagger UI
