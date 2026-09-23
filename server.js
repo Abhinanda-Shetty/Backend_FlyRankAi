@@ -1,10 +1,15 @@
+require("dotenv").config();
 const express = require("express");
+const cookieParser = require("cookie-parser");
+const taskRouter = require("./routers/tasksRouter");
+const authRouter = require("./routers/authRouter");
 const db = require("./database");
+const supabase = require("./supabase.config");
 const app = express();
 
 // Middleware to parse JSON request bodies
 app.use(express.json());
-
+app.use(cookieParser());
 // create a tasks table if it doesn't exist
 db.prepare(
   "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT , done BOOLEAN DEFAULT 0)"
@@ -31,85 +36,29 @@ app.get("/health", (req, res) => {
 });
 
 // Stage 2: read endpoints with 404
-app.get("/tasks", (req, res) => {
-  const tasks = db.prepare("SELECT * FROM tasks").all();
-  if (tasks.length === 0) {
-    return res.status(404).send({ error: "No tasks found" });
-  }
-  res.status(200).send(tasks);
-});
-
-app.get("/tasks/:id", (req, res) => {
-  const taskId = parseInt(req.params.id);
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
-  if (!task) {
-    return res.status(404).send({ error: `Task ${taskId} not found` });
-  }
-  res.status(200).send(task);
-});
-
 // Stage 3: create with validation
-app.post("/tasks", (req, res) => {
-  const { title } = req.body;
-  // If no title provided return 400
-  if (!title) {
-    return res.status(400).send({ error: "Title is required" });
-  }
-  // Generate a new id for the task next greater than the current max id
-  const id = db.prepare("SELECT MAX(id) FROM tasks").get()["MAX(id)"] + 1 || 1;
-  const newTask = { id, title, done: false };
-
-  db.prepare("INSERT INTO tasks (id, title, done) VALUES (?, ?, ?)").run(
-    newTask.id,
-    newTask.title,
-    newTask.done
-  );
-  res.status(201).send(newTask);
-});
-
 // Stage 4: full CRUD
-app.put("/tasks/:id", (req, res) => {
-  // Validate task id
-  const taskId = parseInt(req.params.id);
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
-  console.log(task);
-  if (!task) {
-    return res.status(404).send({ error: `Task ${taskId} not found` });
-  }
+app.use("/tasks", taskRouter);
 
-  // Validate request body
-  const { title, done } = req.body;
-  if (title === undefined && done === undefined) {
-    return res
-      .status(400)
-      .send({ error: "At least one of title or done is required" });
-  }
-  if (title !== undefined) {
-    task.title = title;
-  }
-  if (done !== undefined) {
-    task.done = done;
-  }
-  // Update the task in the database
-  db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(
-    task.title,
-    task.done,
-    taskId
-  );
-  res.status(200).send(task);
+// Stage 1: Signup, Login, Logout Routes
+app.use("/auth", authRouter);
+
+//Stage 2: public and protected gates
+app.get("/public/info", (req, res) => {
+  res.status(200).json({ message: "Welcome stranger! This info is public." });
 });
-
-app.delete("/tasks/:id", (req, res) => {
-  const taskId = parseInt(req.params.id);
-  // Get the task to be deleted
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
-  // If task not found, return 404
-  if (!task) {
-    return res.status(404).send({ error: `Task ${taskId} not found` });
+app.get("/protected/profile", async (req, res) => {
+  const authHeader = req.headers.authorization; // Bearer <token>
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Access token required" });
   }
-  // Remove the task from the tasks array
-  db.prepare("DELETE FROM tasks WHERE id = ?").run(taskId);
-  res.status(204).send(); // Return 204 No Content
+
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ error: "Access token required" });
+  }
+
+  res.status(200).json({ message: "Token not verified yet" });
 });
 
 // Stage 5: Swagger UI
@@ -118,6 +67,6 @@ const swaggerDocument = require("./openapi.json");
 // Serve Swagger UI at /docs
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-app.listen(3000, () => {
+app.listen(process.env.PORT, () => {
   console.log("Server is running on port 3000");
 });
