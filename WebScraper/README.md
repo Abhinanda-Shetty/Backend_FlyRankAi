@@ -1,27 +1,61 @@
-# W5 Assignment A9 — The Polite Scraper
+# The Polite Scraper
 
-## Target Classification
+A small scraping pipeline: fetch → extract → normalize → validate → store → report.
 
-**Target:** Books to Scrape  
-**URL:** https://books.toscrape.com/  
-**Purpose:** A public sandbox website designed for practicing web scraping.
+## Target classification
+- **Site:** https://books.toscrape.com (part of toscrape.com)
+- **Why:** toscrape.com says it is a sandbox built for people to practise scraping.
+- **How much:** first 3 catalogue pages only (60 books).
+- **Data collected:** title, price, availability, rating, description, URL.
+- **robots.txt result:** (your result from Stage 0)
+- **Why appropriate:** it is a public practice site made for exactly this purpose.
 
-### Scope
+I will not reuse this code on another site without checking its rules and terms first.
 
-This scraper will process only the first three catalogue pages and discover 60 unique book detail URLs.
+## Lane and install
+JavaScript lane: Node.js 20+, built-in fetch, Cheerio, Zod.
 
-### Data Collection
+```bash
+npm install
+```
 
-The scraper will collect book titles, prices, availability, ratings, descriptions, product URLs, source catalogue URLs, and fetch timestamps.
+## Run
+```bash
+node src/index.js
+```
+Outputs: `output/books.json`, `output/errors.json`, `output/run-report.json`.
 
-### Robots.txt Check
+## Record schema
+| Field | Type | Notes |
+|---|---|---|
+| title | string | required |
+| product_url | string | absolute https URL, the record's identity |
+| price_text | string | original text, e.g. "£51.77" |
+| price_gbp | number | cleaned, must be > 0 |
+| availability_text | string | whitespace cleaned |
+| rating_text | string | e.g. "Three" |
+| description | string or null | null if the page has none |
+| source_page | string | catalogue page where the book was found |
+| fetched_at | string | UTC timestamp (provenance) |
 
-Checked: https://books.toscrape.com/robots.txt
+## Politeness rules
+- Honest user-agent: `FlyRankInternshipA9/1.0 (+repo link)`
+- At least 600 ms between real requests
+- 10 second timeout on every request
+- Status code checked, only 200 is parsed
+- HTML cached in `cache/`, development reads from the cache
+- One retry on timeout or 5xx, never on 404 or 403
 
-Result: No robots.txt file found (reported as HTTP 404). This result is recorded as an observation, not as general permission to scrape other websites.
+## Run report (real run)
+```json
+PASTE YOUR output/run-report.json HERE
+```
 
-### Appropriateness
+## Why no browser?
+The data is already in the HTML the server sends, so a browser would only add cost.
 
-Books to Scrape is specifically designed for web scraping practice. This assignment uses only its public catalogue and book details, with a limited scope, caching, request delays, and an identifying user-agent.
+## Limitation
+Only the first 3 catalogue pages are scraped, and the selectors will break if the site changes its HTML.
 
-**I will not reuse this code on another site without checking its rules and terms first.**
+## Ethics note
+Use an official API when one exists. Never bypass logins, paywalls or blocks. Collect only what you need.
