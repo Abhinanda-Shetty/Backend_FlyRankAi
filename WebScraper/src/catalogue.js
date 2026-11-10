@@ -1,55 +1,29 @@
 import * as cheerio from "cheerio";
-import { fetchPage } from "./fetcher.js";
+import { getHtml } from "./fetcher.js";
 
-const START_URL = "https://books.toscrape.com/";
+const FIRST_PAGE = "https://books.toscrape.com/catalogue/page-1.html";
+const MAX_PAGES = 3;
 
-export async function discoverBooks() {
-  let currentUrl = START_URL;
+export async function getBookUrls() {
+  const found = new Map(); // bookUrl -> sourcePage (a Map removes duplicates)
+  let pageUrl = FIRST_PAGE;
+  let pages = 0;
 
-  const bookMap = new Map();
-  const cataloguePages = [];
-
-  for (let pageNumber = 1; pageNumber <= 3; pageNumber++) {
-    const { html } = await fetchPage(
-      currentUrl,
-      `catalogue-page-${pageNumber}.html`
-    );
-
+  while (pageUrl && pages < MAX_PAGES) {
+    pages++;
+    const html = await getHtml(pageUrl, `catalogue-page-${pages}.html`);
     const $ = cheerio.load(html);
 
-    cataloguePages.push(currentUrl);
-
-    // Discover every book link on this catalogue page
-    $("article.product_pod h3 a").each((_, element) => {
-      const href = $(element).attr("href");
-
-      if (!href) return;
-
-      const absoluteUrl = new URL(href, currentUrl).href;
-
-      bookMap.set(absoluteUrl, {
-        productUrl: absoluteUrl,
-        sourcePage: currentUrl,
-      });
+    $("article.product_pod h3 a").each((_, el) => {
+      const absolute = new URL($(el).attr("href"), pageUrl).href;
+      if (!found.has(absolute)) {
+        found.set(absolute, pageUrl);
+      }
     });
 
-    // Follow the website's own Next link
-    if (pageNumber < 3) {
-      const nextHref = $("li.next a").attr("href");
-
-      if (!nextHref) {
-        throw new Error(`Next link missing on page ${pageNumber}`);
-      }
-
-      currentUrl = new URL(nextHref, currentUrl).href;
-    }
+    const nextHref = $("li.next a").attr("href");
+    pageUrl = nextHref ? new URL(nextHref, pageUrl).href : null;
   }
 
-  const books = [...bookMap.values()];
-
-  console.log(`catalogue_pages=${cataloguePages.length}`);
-  console.log(`discovered=${books.length}`);
-  console.log(`unique_urls=${bookMap.size}`);
-
-  return books;
+  return { books: [...found.entries()], pages };
 }

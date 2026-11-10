@@ -1,61 +1,44 @@
-import fs from "node:fs/promises";
+import fs from "node:fs";
 import path from "node:path";
 
-const CACHE_DIR = path.resolve("cache");
-
 const USER_AGENT =
-  "FlyRankInternship-A9/1.0 (+https://github.com/Abhinanda-Shetty/Backend_FlyRankAi)";
+  "FlyRankInternshipA9/1.0 (+https://github.com/Abhinanda-Shetty/Backend_FlyRankAi)";
+const TIMEOUT_MS = 10000;
+const DELAY_MS = 600; // pause between real requests (rule: at least 500)
+const CACHE_DIR = "cache";
 
-export async function fetchPage(url, filename) {
-  await fs.mkdir(CACHE_DIR, { recursive: true });
+let lastRequestTime = 0;
 
-  const cachePath = path.join(CACHE_DIR, filename);
+async function waitPolitely() {
+  const wait = DELAY_MS - (Date.now() - lastRequestTime);
+  if (wait > 0) {
+    await new Promise((resolve) => setTimeout(resolve, wait));
+  }
+  lastRequestTime = Date.now();
+}
 
-  // 1. Check cache
-  try {
-    const cachedHTML = await fs.readFile(cachePath, "utf-8");
+export async function getHtml(url, cacheName) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  const filePath = path.join(CACHE_DIR, cacheName);
 
-    console.log(`CACHE HIT: ${url}`);
-    console.log(`Size: ${Buffer.byteLength(cachedHTML)} bytes`);
-
-    return {
-      html: cachedHTML,
-      fetchedAt: new Date().toISOString(),
-      cacheHit: true,
-    };
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
+  if (fs.existsSync(filePath)) {
+    const html = fs.readFileSync(filePath, "utf-8");
+    console.log(`CACHE HIT ${cacheName} (${html.length} chars)`);
+    return html;
   }
 
-  // 2. Fetch website
-  console.log(`FETCH: ${url}`);
-
+  await waitPolitely();
   const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "User-Agent": USER_AGENT,
-      Accept: "text/html",
-    },
-    signal: AbortSignal.timeout(25000),
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
-  // 3. Check HTTP status
   if (response.status !== 200) {
-    throw new Error(`HTTP error: ${response.status} for ${url}`);
+    throw new Error(`Bad status ${response.status} for ${url}`);
   }
 
-  // 4. Read and cache HTML
   const html = await response.text();
-  const fetchedAt = new Date().toISOString();
-
-  await fs.writeFile(cachePath, html, "utf-8");
-
-  console.log(`Saved: ${cachePath}`);
-  console.log(`Size: ${Buffer.byteLength(html)} bytes`);
-
-  return {
-    html,
-    fetchedAt,
-    cacheHit: false,
-  };
+  fs.writeFileSync(filePath, html, "utf-8");
+  console.log(`FETCH ${cacheName} (${html.length} chars)`);
+  return html;
 }
