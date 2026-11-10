@@ -1,8 +1,13 @@
 import * as cheerio from "cheerio";
 
+export function cleanPrice(priceText) {
+  // "£51.77" -> 51.77
+  return Number(priceText.replace("£", "").trim());
+}
+
 export function parseBook(html, productUrl, sourcePage) {
   const $ = cheerio.load(html);
-  const product = $("article.product_page"); // only look inside the product area
+  const product = $("article.product_page");
 
   const title = product.find("h1").text().trim();
   const priceText = product.find("p.price_color").first().text().trim();
@@ -13,7 +18,7 @@ export function parseBook(html, productUrl, sourcePage) {
     .replace(/\s+/g, " ")
     .trim();
 
-  const ratingClass = product.find("p.star-rating").attr("class"); // "star-rating Three"
+  const ratingClass = product.find("p.star-rating").attr("class");
   const ratingText = ratingClass.split(" ").find((c) => c !== "star-rating");
 
   const descTag = product.find("#product_description").next("p");
